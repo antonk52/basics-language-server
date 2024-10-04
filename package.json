@@ -1,0 +1,23 @@
+{
+  "name": "basics-language-server",
+  "version": "0.1.0",
+  "module": "index.ts",
+  "bin": {
+    "basics-language-server": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "server": "node dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-uri": "^3.0.8"
+  }
+}
