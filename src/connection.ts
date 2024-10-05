@@ -2,6 +2,8 @@
  * TODO
  * - [x] completion for identifiers in current document
  * - [x] completion for paths from current document
+ * - [x] completion for paths from root
+ * - [x] completion for paths from ~
  * - [ ] workspace configuration
  * - [ ] completion for snippets
  */
@@ -9,6 +11,7 @@ import * as lsp from 'vscode-languageserver/node';
 import {textDocuments} from './textDocuments.js';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 import * as uri from 'vscode-uri';
 
@@ -21,6 +24,13 @@ const SETTINGS = {
   path: {
     enable: true
   }
+}
+
+const RE = {
+  // This regex makes a **smaaaaall assumption** that path parts
+  // are always composed of letters, digits, hyphens, and underscores
+  // and paths parts are separated by slashes (unix like)
+  path: /(~|\.{1,2})?(\/([\w\d-_]|\.{1,2}))*\/$/,
 }
 
 export function createConnection(): lsp.Connection {
@@ -43,10 +53,11 @@ export function createConnection(): lsp.Connection {
 
     const linePreCursor = currentLine.slice(0, params.position.character);
 
-    if (currentLine.endsWith('/')) {
+    if (linePreCursor.endsWith('/')) {
       return getPathsCompletionItems(
         linePreCursor,
         params.textDocument.uri,
+        connection,
       );
     }
 
@@ -96,15 +107,21 @@ export function createConnection(): lsp.Connection {
   return connection;
 }
 
-function getPathsCompletionItems(linePreCursor: string, documentUri: lsp.DocumentUri): lsp.CompletionItem[] {
-  const match = linePreCursor.match(/\.?\.\/.*$/);
+function getPathsCompletionItems(linePreCursor: string, documentUri: lsp.DocumentUri, connection: lsp.Connection): lsp.CompletionItem[] {
+  const match = linePreCursor.match(RE.path);
 
   if (!match) return [];
 
   const [pathLike] = match;
 
-  const currentDir = uri.Utils.dirname(uri.URI.parse(documentUri));
-  const absolutePath = path.join(currentDir.fsPath, pathLike);
+  let absolutePath = pathLike;
+  if (pathLike.startsWith('~')) {
+    const homeDir = process.env.HOME || os.homedir();
+    absolutePath = path.join(homeDir, pathLike.slice(1));
+  } else if (absolutePath.startsWith('.')) {
+    const currentDir = uri.Utils.dirname(uri.URI.parse(documentUri));
+    absolutePath = path.join(currentDir.fsPath, pathLike);
+  }
 
   const dirContents = fs.readdirSync(absolutePath);
 
@@ -114,13 +131,18 @@ function getPathsCompletionItems(linePreCursor: string, documentUri: lsp.Documen
     // TODO abort if token is cancelled
     // TODO async
     // TODO cache stats
-    const stat = fs.statSync(path.join(absolutePath, dir));
+    let stat
+    try {
+      stat = fs.statSync(path.join(absolutePath, dir));
+    } catch (e: any) {
+      return null;
+    }
     return {
       label: dir,
       kind: stat.isDirectory() ? lsp.CompletionItemKind.Folder : lsp.CompletionItemKind.File,
       // TODO we can show first few lines of a file in `detail`
     } satisfies lsp.CompletionItem;
-  });
+  }).filter(x => x !== null);
 }
 
 // People can have use EOL from other systems in their editor settings
