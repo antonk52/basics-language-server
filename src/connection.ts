@@ -4,7 +4,7 @@
  * - [x] completion for paths from current document
  * - [x] completion for paths from root
  * - [x] completion for paths from ~
- * - [ ] workspace configuration
+ * - [x] workspace configuration
  * - [ ] completion for snippets
  */
 import * as lsp from 'vscode-languageserver/node';
@@ -18,6 +18,7 @@ import * as uri from 'vscode-uri';
 const SETTINGS = {
   buffer: {
     enable: true,
+    /** only complete identifiers longer than this */
     minCompletionLength: 4,
   },
   path: {
@@ -112,6 +113,15 @@ export function createConnection(): lsp.Connection {
     return result;
   });
 
+  connection.onDidChangeConfiguration(change => {
+    // TODO validate new settings
+    if (change.settings.buffer) {
+      Object.assign(SETTINGS.buffer, change.settings.buffer);
+    }
+    if (change.settings.path) {
+      Object.assign(SETTINGS.path, change.settings.path);
+    }
+  });
 
   return connection;
 }
