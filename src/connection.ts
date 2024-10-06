@@ -19,7 +19,6 @@ const SETTINGS = {
   buffer: {
     enable: true,
     minCompletionLength: 4,
-    triggerLength: 3
   },
   path: {
     enable: true
@@ -62,6 +61,12 @@ export function createConnection(): lsp.Connection {
         params.textDocument.uri,
         connection,
       );
+    }
+
+    // user started typing an identifier
+    const match = lineTextPreCursor.match(/\b[A-Za-z_$][A-Za-z0-9_$]*$/);
+    if (!match) {
+      return null;
     }
 
     const bufContent = textDocument.getText();
