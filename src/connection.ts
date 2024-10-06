@@ -42,25 +42,29 @@ export function createConnection(): lsp.Connection {
     // TODO there are probably more optimal ways to
     // infer all identifier-like strings from the buffer
     // than getting full content and regexing it on every request
+    if (params.position.character === 0) {
+      return null;
+    }
     const textDocument = textDocuments.get(params.textDocument.uri);
     if (!textDocument) {
       return null;
     }
-    const bufContent = textDocument.getText();
-    const lines = bufContent.split(getEOL(bufContent));
-    const currentLine = lines[params.position.line];
-    if (typeof currentLine !== 'string') return null;
+    const lineTextPreCursor = textDocument.getText(
+      {
+        start: {line: params.position.line, character: 0},
+        end: params.position,
+      } satisfies lsp.Range,
+    );
 
-    const linePreCursor = currentLine.slice(0, params.position.character);
-
-    if (linePreCursor.endsWith('/')) {
+    if (lineTextPreCursor.endsWith('/')) {
       return getPathsCompletionItems(
-        linePreCursor,
+        lineTextPreCursor,
         params.textDocument.uri,
         connection,
       );
     }
 
+    const bufContent = textDocument.getText();
     const allIdentifiers = bufContent.match(/\b[A-Za-z_$][A-Za-z0-9_$]*\b/g);
 
     if (!allIdentifiers) return null;
@@ -107,7 +111,7 @@ export function createConnection(): lsp.Connection {
   return connection;
 }
 
-function getPathsCompletionItems(linePreCursor: string, documentUri: lsp.DocumentUri, connection: lsp.Connection): lsp.CompletionItem[] {
+function getPathsCompletionItems(linePreCursor: string, documentUri: lsp.DocumentUri, _connection: lsp.Connection): lsp.CompletionItem[] {
   const match = linePreCursor.match(RE.path);
 
   if (!match) return [];
@@ -143,23 +147,4 @@ function getPathsCompletionItems(linePreCursor: string, documentUri: lsp.Documen
       // TODO we can show first few lines of a file in `detail`
     } satisfies lsp.CompletionItem;
   }).filter(x => x !== null);
-}
-
-// People can have use EOL from other systems in their editor settings
-// For this reason we need to infer EOL per document
-// https://github.com/wkillerud/some-sass/blob/main/vscode-extension/src/utils/string.ts
-function getEOL(text: string): string {
-  for (let i = 0; i < text.length; i++) {
-    const ch = text.charAt(i);
-    if (ch === '\r') {
-      if (i + 1 < text.length && text.charAt(i + 1) === '\n') {
-        return '\r\n';
-      }
-      return '\r';
-    }
-    if (ch === '\n') {
-      return '\n';
-    }
-  }
-  return '\n';
 }
