@@ -16,9 +16,6 @@
  *   - [ ] disable/enable
  *   - [ ] cache loaded snippets
  *   - [ ] optimise completion by snippets
- *
- * Known bugs
- * - [ ] "/Users/"
  */
 import * as lsp from 'vscode-languageserver/node';
 import {textDocuments} from './textDocuments.js';
@@ -73,7 +70,7 @@ const RE = {
   // This regex makes a **smaaaaall assumption** that path parts
   // are always composed of letters, digits, hyphens, and underscores
   // and paths parts are separated by slashes (unix like)
-  path: /(~|\.{1,2})?(\/([\w\d-_]|\.{1,2}))*\/$/,
+  path: /(~|\.{1,2})?(\/([\w\d-_\.]*|\.{1,2}))*\/$/,
 }
 
 interface BasicsSnippetDefintion {
