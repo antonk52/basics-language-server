@@ -89,6 +89,9 @@ export function createConnection(): lsp.Connection {
     return bufCompletions;
   });
 
+  // TODO debounce doc updates to save cache identifiersLike used for completion
+  // textDocuments.onDidChangeContent(change => {});
+
   // declare server capabilities
   connection.onInitialize(({capabilities}) => {
     const hasWorkspaceFolderCapability = !!(
