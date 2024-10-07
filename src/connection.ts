@@ -17,6 +17,9 @@
  *   - [x] disable/enable
  *   - [ ] cache loaded snippets
  *   - [ ] optimise completion by snippets
+ * - [x] validate server settings
+ * - [ ] surface errors to client
+ * - [ ] docs in README
  */
 import * as lsp from 'vscode-languageserver/node';
 import fg from 'fast-glob';
@@ -48,21 +51,31 @@ const VSCodeSnippetEntitySchema = S.object({
 type VSCodeSnippetEntity = S.Infer<typeof VSCodeSnippetEntitySchema>;
 const VSCodeJsonSnippetsDefinitionSchema = S.record(S.string(), VSCodeSnippetEntitySchema);
 
-interface UserSettings {
-  buffer: {
-    enable: boolean,
-    minCompletionLength: number,
-  },
-  path: {
-    enable: boolean,
-  },
-  snippet: {
-    enable: boolean,
-    sources: string | string[],
-  }
-}
+const BufferSettingsSchema = S.object({
+  enable: S.boolean(),
+  minCompletionLength: S.number(),
+});
+const PathSettingsSchema = S.object({
+  enable: S.boolean(),
+});
+const SnippetSettingsSchema = S.object({
+  enable: S.boolean(),
+  sources: S.union([S.string(), S.array(S.string())]),
+});
+const SettingsSchema = S.object({
+  buffer: BufferSettingsSchema,
+  path: PathSettingsSchema,
+  snippet: SnippetSettingsSchema,
+});
 
-const SETTINGS: UserSettings = {
+// just like above but everything is options
+const UserSettingsSchema = S.partial(S.object({
+  buffer: S.partial(BufferSettingsSchema),
+  path: S.partial(PathSettingsSchema),
+  snippet: S.partial(SnippetSettingsSchema),
+}));
+
+const SETTINGS: S.Infer<typeof SettingsSchema> = {
   buffer: {
     enable: true,
     /** only complete identifiers longer than this */
@@ -319,74 +332,79 @@ export function createConnection(): lsp.Connection {
   });
 
   connection.onDidChangeConfiguration(change => {
-    // TODO validate new settings
-    if (change.settings.buffer) {
-      Object.assign(SETTINGS.buffer, change.settings.buffer);
-    }
-    if (change.settings.path) {
-      Object.assign(SETTINGS.path, change.settings.path);
-    }
-    if (change.settings.snippet) {
-      Object.assign(SETTINGS.snippet, change.settings.snippet);
+    const settings = change.settings as unknown;
 
-      if (SETTINGS.snippet.enable && SETTINGS.snippet.sources) {
-        const sources = typeof SETTINGS.snippet.sources === 'string' ? [SETTINGS.snippet.sources] : SETTINGS.snippet.sources;
+    try {
+      S.assert(settings, UserSettingsSchema);
 
-        const stack = [...sources];
+      if (change.settings.buffer) {
+        Object.assign(SETTINGS.buffer, change.settings.buffer);
+      }
+      if (change.settings.path) {
+        Object.assign(SETTINGS.path, change.settings.path);
+      }
+      if (change.settings.snippet) {
+        Object.assign(SETTINGS.snippet, change.settings.snippet);
 
-        while (stack.length > 0) {
-          const sourcePath = stack.shift()!;
+        if (SETTINGS.snippet.enable && SETTINGS.snippet.sources) {
+          const sources = typeof SETTINGS.snippet.sources === 'string' ? [SETTINGS.snippet.sources] : SETTINGS.snippet.sources;
 
-          if (fg.isDynamicPattern(sourcePath)) {
-            const paths = fg.sync(sourcePath, {
-              absolute: true,
-              dot: true,
-            });
-            stack.unshift(...paths);
-            continue;
-          }
-          try {
-            const normalizedPath = path.normalize(sourcePath);
+          const stack = [...sources];
 
-            // has package.json -> handle as package.json
-            if (path.basename(normalizedPath) === 'package.json') {
-              snippetCache.loadSnippetsFromPackageJson(sourcePath);
+          while (stack.length > 0) {
+            const sourcePath = stack.shift()!;
+
+            if (fg.isDynamicPattern(sourcePath)) {
+              const paths = fg.sync(sourcePath, {
+                absolute: true,
+                dot: true,
+              });
+              stack.unshift(...paths);
               continue;
             }
+            try {
+              const normalizedPath = path.normalize(sourcePath);
 
-            // handle as language json file
-            if (normalizedPath.endsWith('.json')) {
-              snippetCache.loadSnippetsFromLanguageJson(sourcePath);
+              // has package.json -> handle as package.json
+              if (path.basename(normalizedPath) === 'package.json') {
+                snippetCache.loadSnippetsFromPackageJson(sourcePath);
+                continue;
+              }
 
-              continue;
-            }
+              // handle as language json file
+              if (normalizedPath.endsWith('.json')) {
+                snippetCache.loadSnippetsFromLanguageJson(sourcePath);
 
-            // dir containing package.json or lang.json files
-            if (fs.statSync(normalizedPath).isDirectory()) {
-              const maybePackageJson = path.join(normalizedPath, 'package.json');
-              if (fs.existsSync(maybePackageJson)) {
-                snippetCache.loadSnippetsFromPackageJson(maybePackageJson);
-              } else {
-                // handle as <lang>.json files
-                const jsons = fg.sync('**/*.json', {
-                  cwd: normalizedPath,
-                  absolute: true,
-                  dot: true,
-                });
-                for (const json of jsons) {
-                  snippetCache.loadSnippetsFromLanguageJson(json);
+                continue;
+              }
+
+              // dir containing package.json or lang.json files
+              if (fs.statSync(normalizedPath).isDirectory()) {
+                const maybePackageJson = path.join(normalizedPath, 'package.json');
+                if (fs.existsSync(maybePackageJson)) {
+                  snippetCache.loadSnippetsFromPackageJson(maybePackageJson);
+                } else {
+                  // handle as <lang>.json files
+                  const jsons = fg.sync('**/*.json', {
+                    cwd: normalizedPath,
+                    absolute: true,
+                    dot: true,
+                  });
+                  for (const json of jsons) {
+                    snippetCache.loadSnippetsFromLanguageJson(json);
+                  }
                 }
               }
-            }
 
-            // else ignore
-          } catch (e: any) {
-            connection.console.error(`Failed to load snippets from ${sourcePath}. Error: ${e?.message ?? e}`);
+              // else ignore
+            } catch (e: any) {
+              connection.console.error(`Failed to load snippets from ${sourcePath}. Error: ${e?.message ?? e}`);
+            }
           }
         }
-        connection.console.debug(`DDD Snippets: global ${snippetCache.globalSnippets.length}. langs: ${Object.keys(snippetCache.snippetsByLanguage).length}`);
       }
-    }
+      // TODO surface errors to client
+    } catch {}
   });
 
   return connection;
