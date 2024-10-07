@@ -7,17 +7,19 @@
  * - [x] workspace configuration
  * - [ ] completion for snippets
  *   - [x] load from package.json
+ *   - [x] expand as snippets
  *   - [ ] validate json
- *   - [ ] load from lang.json
- *   - [ ] load from dir
+ *   - [x] load from lang.json
+ *   - [x] load from dir
  *   - [ ] validate json
  *   - [ ] support JSONC
- *   - [ ] support globs for snippet sources
- *   - [ ] disable/enable
+ *   - [x] support globs for snippet sources
+ *   - [x] disable/enable
  *   - [ ] cache loaded snippets
  *   - [ ] optimise completion by snippets
  */
 import * as lsp from 'vscode-languageserver/node';
+import fg from 'fast-glob';
 import {textDocuments} from './textDocuments.js';
 import fs from 'fs';
 import path from 'path';
@@ -188,6 +190,7 @@ function cachedSnippetToCompletionItem(snippet: BasicsSnippetDefintion): lsp.Com
   return {
     label: snippet.description ?? snippet.label,
     insertText: Array.isArray(snippet.body) ? snippet.body.join('\n') : snippet.body,
+    insertTextFormat: lsp.InsertTextFormat.Snippet,
     kind: lsp.CompletionItemKind.Snippet,
   } satisfies lsp.CompletionItem;
 }
@@ -305,20 +308,59 @@ export function createConnection(): lsp.Connection {
       if (SETTINGS.snippet.enable && SETTINGS.snippet.sources) {
         const sources = typeof SETTINGS.snippet.sources === 'string' ? [SETTINGS.snippet.sources] : SETTINGS.snippet.sources;
 
-        // TODO support globs
-        for (const sourcePath of sources) {
+        const stack = [...sources];
+
+        while (stack.length > 0) {
+          const sourcePath = stack.shift()!;
+
+          if (fg.isDynamicPattern(sourcePath)) {
+            const paths = fg.sync(sourcePath, {
+              absolute: true,
+              dot: true,
+            });
+            stack.unshift(...paths);
+            continue;
+          }
           try {
             const normalizedPath = path.normalize(sourcePath);
-            const baseName = path.basename(normalizedPath);
-            if (baseName === 'package.json') {
+
+            // has package.json -> handle as package.json
+            if (path.basename(normalizedPath) === 'package.json') {
               snippetCache.loadSnippetsFromPackageJson(sourcePath);
-            } else {
-              snippetCache.loadSnippetsFromLanguageJson(sourcePath);
+              continue;
             }
+
+            // handle as language json file
+            if (normalizedPath.endsWith('.json')) {
+              snippetCache.loadSnippetsFromLanguageJson(sourcePath);
+
+              continue;
+            }
+
+            // dir containing package.json or lang.json files
+            if (fs.statSync(normalizedPath).isDirectory()) {
+              const maybePackageJson = path.join(normalizedPath, 'package.json');
+              if (fs.existsSync(maybePackageJson)) {
+                snippetCache.loadSnippetsFromPackageJson(maybePackageJson);
+              } else {
+                // handle as <lang>.json files
+                const jsons = fg.sync('**/*.json', {
+                  cwd: normalizedPath,
+                  absolute: true,
+                  dot: true,
+                });
+                for (const json of jsons) {
+                  snippetCache.loadSnippetsFromLanguageJson(json);
+                }
+              }
+            }
+
+            // else ignore
           } catch (e: any) {
             connection.console.error(`Failed to load snippets from ${sourcePath}. Error: ${e?.message ?? e}`);
           }
         }
+        connection.console.debug(`DDD Snippets: global ${snippetCache.globalSnippets.length}. langs: ${Object.keys(snippetCache.snippetsByLanguage).length}`);
       }
     }
   });
