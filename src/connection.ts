@@ -8,7 +8,7 @@
  * - [ ] completion for snippets
  *   - [x] load from package.json
  *   - [x] expand as snippets
- *   - [ ] validate json
+ *   - [x] validate package.json
  *   - [x] load from lang.json
  *   - [x] load from dir
  *   - [ ] validate json
@@ -22,11 +22,23 @@ import * as lsp from 'vscode-languageserver/node';
 import fg from 'fast-glob';
 import {textDocuments} from './textDocuments.js';
 import * as JSONC from 'jsonc-parser';
+import * as S from 'superstruct';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
 import * as uri from 'vscode-uri';
+
+const PackageJsonSchema = S.object({
+  contributes: S.optional(S.object({
+    snippets: S.optional(S.array(
+      S.object({
+        language: S.union([S.string(), S.array(S.string())]),
+        path: S.string(),
+      })
+    )),
+  })),
+});
 
 interface UserSettings {
   buffer: {
@@ -101,33 +113,34 @@ class SnippetCache {
    * only json is supported (no jsonc)
    */
   loadSnippetsFromPackageJson(absolutePath: string) {
-    // TODO validate json
-    // TODO lift validation and errors to onConfigurationChange
     let pkgJson: unknown;
     try {
       pkgJson = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
-    } catch {}
-    // @ts-expect-error
-    const snippets = pkgJson?.contributes?.snippets as Array<
-      {language: string | string[], path: string}
-    > | undefined;
+      S.assert(pkgJson, PackageJsonSchema)
 
-    if (!snippets) {
-      return;
-    }
+      const snippets = pkgJson?.contributes?.snippets as Array<
+        {language: string | string[], path: string}
+      > | undefined;
 
-    const dir = path.dirname(absolutePath);
+      if (!snippets) {
+        return;
+      }
 
-    for (const {language, path: relativeSnippetFilePath} of snippets) {
-      const snippetsFilePath = path.join(dir, relativeSnippetFilePath);
-      if (typeof language === 'string') {
-        this.loadSnippetsFromLanguageJson(snippetsFilePath, language);
-      } else {
-        for (const lang of language) {
-          this.loadSnippetsFromLanguageJson(snippetsFilePath, lang);
+      const dir = path.dirname(absolutePath);
+
+      for (const {language, path: relativeSnippetFilePath} of snippets) {
+        const snippetsFilePath = path.join(dir, relativeSnippetFilePath);
+        if (typeof language === 'string') {
+          this.loadSnippetsFromLanguageJson(snippetsFilePath, language);
+        } else {
+          for (const lang of language) {
+            this.loadSnippetsFromLanguageJson(snippetsFilePath, lang);
+          }
         }
       }
     }
+    // TODO lift validation and errors to onConfigurationChange
+    catch {}
   }
   loadSnippetsFromLanguageJson(absolutePath: string, lang?: string) {
     // TODO avoid multiple file reads
