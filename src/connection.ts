@@ -5,7 +5,7 @@
  * - [x] completion for paths from root
  * - [x] completion for paths from ~
  * - [x] workspace configuration
- * - [ ] completion for snippets
+ * - [x] completion for snippets
  *   - [x] load from package.json
  *   - [x] expand as snippets
  *   - [x] validate package.json
@@ -19,7 +19,7 @@
  *   - [ ] optimise completion by snippets
  * - [x] validate server settings
  * - [ ] surface errors to client
- * - [ ] docs in README
+ * - [x] docs in README
  */
 import * as lsp from 'vscode-languageserver/node';
 import fg from 'fast-glob';
