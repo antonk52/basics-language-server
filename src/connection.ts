@@ -11,7 +11,7 @@
  *   - [x] validate package.json
  *   - [x] load from lang.json
  *   - [x] load from dir
- *   - [ ] validate json
+ *   - [x] validate json
  *   - [x] support JSONC
  *   - [x] support globs for snippet sources
  *   - [x] disable/enable
@@ -39,6 +39,14 @@ const PackageJsonSchema = S.object({
     )),
   })),
 });
+
+const VSCodeSnippetEntitySchema = S.object({
+  prefix: S.union([S.string(), S.array(S.string())]),
+  body: S.union([S.string(), S.array(S.string())]),
+  description: S.optional(S.string()), // fallbacks to name
+});
+type VSCodeSnippetEntity = S.Infer<typeof VSCodeSnippetEntitySchema>;
+const VSCodeJsonSnippetsDefinitionSchema = S.record(S.string(), VSCodeSnippetEntitySchema);
 
 interface UserSettings {
   buffer: {
@@ -95,15 +103,6 @@ interface BasicsSnippetDefintion {
   description?: string; // fallbacks to name
 }
 
-interface VSCodeSnippetEntity {
-  prefix: string | string[];
-  body: string | string[];
-  description?: string; // fallbacks to name
-}
-interface VSCodeSnippetsDefinition {
-  [name: string]: VSCodeSnippetEntity;
-}
-
 class SnippetCache {
   globalSnippets: BasicsSnippetDefintion[] = [];
   snippetsByLanguage: {[lang: string]: BasicsSnippetDefintion[]} = {};
@@ -144,18 +143,21 @@ class SnippetCache {
   }
   loadSnippetsFromLanguageJson(absolutePath: string, lang?: string) {
     // TODO avoid multiple file reads
-    // TODO validate json
-    // TODO lift validation and errors to onConfigurationChange
     const parseErrors: JSONC.ParseError[] = [];
-    const json = JSONC.parse(
-      fs.readFileSync(absolutePath, 'utf-8'),
-      parseErrors,
-    );
-    if (lang == null) {
-      lang = path.basename(absolutePath, path.extname(absolutePath));
-    }
+    try {
+      const json = JSONC.parse(
+        fs.readFileSync(absolutePath, 'utf-8'),
+        parseErrors,
+      );
+      S.assert(json, VSCodeJsonSnippetsDefinitionSchema);
+      if (lang == null) {
+        lang = path.basename(absolutePath, path.extname(absolutePath));
+      }
 
-    this.addSnippets(lang, Object.entries(json));
+      this.addSnippets(lang, Object.entries(json));
+    }
+    // TODO lift validation and errors to onConfigurationChange
+    catch {}
   }
 
   addSnippets(lang: string, snippets: Array<[name: string, entity: VSCodeSnippetEntity]>) {
