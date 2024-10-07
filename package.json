@@ -1,6 +1,6 @@
 {
   "name": "basics-language-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "module": "index.ts",
   "bin": {
     "basics-language-server": "./dist/cli.js"
