@@ -12,7 +12,7 @@
  *   - [x] load from lang.json
  *   - [x] load from dir
  *   - [ ] validate json
- *   - [ ] support JSONC
+ *   - [x] support JSONC
  *   - [x] support globs for snippet sources
  *   - [x] disable/enable
  *   - [ ] cache loaded snippets
@@ -21,6 +21,7 @@
 import * as lsp from 'vscode-languageserver/node';
 import fg from 'fast-glob';
 import {textDocuments} from './textDocuments.js';
+import * as JSONC from 'jsonc-parser';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -95,12 +96,17 @@ class SnippetCache {
   globalSnippets: BasicsSnippetDefintion[] = [];
   snippetsByLanguage: {[lang: string]: BasicsSnippetDefintion[]} = {};
 
-  /* for pakcage.json vscode like snippets */
+  /**
+   * For package.json vscode like snippets
+   * only json is supported (no jsonc)
+   */
   loadSnippetsFromPackageJson(absolutePath: string) {
     // TODO validate json
-    // TODO support JSONC
     // TODO lift validation and errors to onConfigurationChange
-    const pkgJson = JSON.parse(fs.readFileSync(absolutePath, 'utf-8')) as unknown;
+    let pkgJson: unknown;
+    try {
+      pkgJson = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
+    } catch {}
     // @ts-expect-error
     const snippets = pkgJson?.contributes?.snippets as Array<
       {language: string | string[], path: string}
@@ -126,11 +132,14 @@ class SnippetCache {
   loadSnippetsFromLanguageJson(absolutePath: string, lang?: string) {
     // TODO avoid multiple file reads
     // TODO validate json
-    // TODO support JSONC
     // TODO lift validation and errors to onConfigurationChange
-    const json = JSON.parse(fs.readFileSync(absolutePath, 'utf-8')) as VSCodeSnippetsDefinition;
+    const parseErrors: JSONC.ParseError[] = [];
+    const json = JSONC.parse(
+      fs.readFileSync(absolutePath, 'utf-8'),
+      parseErrors,
+    );
     if (lang == null) {
-      lang = path.basename(absolutePath, '.json');
+      lang = path.basename(absolutePath, path.extname(absolutePath));
     }
 
     this.addSnippets(lang, Object.entries(json));
