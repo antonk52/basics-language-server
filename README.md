@@ -1,5 +1,11 @@
 # basics-language-server
 
+Features:
+
+* **Buffer completion** - complete words that are already in the buffer
+* **Path completion** - complete file paths relative from buffer or absolute
+* **Snippet completion** - complete custom snippets or from packages (like [friendly-snippets](https://github.com/rafamadriz/friendly-snippets))
+
 To install:
 
 ```bash
