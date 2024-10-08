@@ -15,7 +15,7 @@
  *   - [x] support JSONC
  *   - [x] support globs for snippet sources
  *   - [x] disable/enable
- *   - [ ] cache loaded snippets
+ *   - [x] cache loaded snippets
  *   - [ ] optimise completion by snippets
  * - [x] validate server settings
  * - [ ] surface errors to client
@@ -50,6 +50,7 @@ const VSCodeSnippetEntitySchema = S.object({
 });
 type VSCodeSnippetEntity = S.Infer<typeof VSCodeSnippetEntitySchema>;
 const VSCodeJsonSnippetsDefinitionSchema = S.record(S.string(), VSCodeSnippetEntitySchema);
+type VSCodeJsonSnippetsDefinition = S.Infer<typeof VSCodeJsonSnippetsDefinitionSchema>;
 
 const BufferSettingsSchema = S.object({
   enable: S.boolean(),
@@ -120,6 +121,33 @@ class SnippetCache {
   globalSnippets: BasicsSnippetDefintion[] = [];
   snippetsByLanguage: {[lang: string]: BasicsSnippetDefintion[]} = {};
 
+  private fileCache: Map<string, VSCodeJsonSnippetsDefinition> = new Map();
+  clearFileCache() {
+    this.fileCache.clear();
+  }
+
+  readJsonSnippetsFile(absolutePath: string): VSCodeJsonSnippetsDefinition | null {
+    if (this.fileCache.has(absolutePath)) {
+      return this.fileCache.get(absolutePath)!;
+    }
+
+    const parseErrors: JSONC.ParseError[] = [];
+    try {
+      const json = JSONC.parse(
+        fs.readFileSync(absolutePath, 'utf-8'),
+        parseErrors,
+      );
+      S.assert(json, VSCodeJsonSnippetsDefinitionSchema);
+
+      this.fileCache.set(absolutePath, json);
+
+      return json;
+    } catch {
+      // TODO lift validation and errors to onConfigurationChange
+      return null
+    }
+  }
+
   /**
    * For package.json vscode like snippets
    * only json is supported (no jsonc)
@@ -155,22 +183,18 @@ class SnippetCache {
     catch {}
   }
   loadSnippetsFromLanguageJson(absolutePath: string, lang?: string) {
-    // TODO avoid multiple file reads
-    const parseErrors: JSONC.ParseError[] = [];
-    try {
-      const json = JSONC.parse(
-        fs.readFileSync(absolutePath, 'utf-8'),
-        parseErrors,
-      );
-      S.assert(json, VSCodeJsonSnippetsDefinitionSchema);
-      if (lang == null) {
-        lang = path.basename(absolutePath, path.extname(absolutePath));
-      }
+    const json = this.readJsonSnippetsFile(absolutePath);
 
-      this.addSnippets(lang, Object.entries(json));
-    }
     // TODO lift validation and errors to onConfigurationChange
-    catch {}
+    if (json == null) {
+      return;
+    }
+
+    if (lang == null) {
+      lang = path.basename(absolutePath, path.extname(absolutePath));
+    }
+
+    this.addSnippets(lang, Object.entries(json));
   }
 
   addSnippets(lang: string, snippets: Array<[name: string, entity: VSCodeSnippetEntity]>) {
@@ -401,6 +425,9 @@ export function createConnection(): lsp.Connection {
               connection.console.error(`Failed to load snippets from ${sourcePath}. Error: ${e?.message ?? e}`);
             }
           }
+
+          // No need to keep file cache in memory after snippets are loaded
+          snippetCache.clearFileCache();
         }
       }
       // TODO surface errors to client
