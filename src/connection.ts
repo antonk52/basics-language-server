@@ -18,7 +18,7 @@
  *   - [x] cache loaded snippets
  *   - [ ] optimise completion by snippets
  * - [x] validate server settings
- * - [ ] surface errors to client
+ * - [x] surface errors to client
  * - [x] docs in README
  */
 import * as lsp from 'vscode-languageserver/node';
@@ -32,18 +32,14 @@ import os from 'os';
 
 import * as uri from 'vscode-uri';
 
-const PackageJsonSchema = S.object({
-  contributes: S.optional(S.object({
-    snippets: S.optional(S.array(
-      S.object({
-        language: S.union([S.string(), S.array(S.string())]),
-        path: S.string(),
-      })
-    )),
-  })),
-});
+const PackageJsonSnippetsSchema = S.array(
+  S.type({
+    language: S.union([S.string(), S.array(S.string())]),
+    path: S.string(),
+  })
+);
 
-const VSCodeSnippetEntitySchema = S.object({
+const VSCodeSnippetEntitySchema = S.type({
   prefix: S.union([S.string(), S.array(S.string())]),
   body: S.union([S.string(), S.array(S.string())]),
   // Arrays are not valid descriptions but there are cases where arrays are using in descriptoin
@@ -118,6 +114,14 @@ interface BasicsSnippetDefintion {
   description?: string; // fallbacks to name
 }
 
+type Result<Ok, Err> = {
+  ok: true;
+  value: Ok;
+} | {
+  ok: false;
+  error: Err
+}
+
 class SnippetCache {
   globalSnippets: BasicsSnippetDefintion[] = [];
   snippetsByLanguage: {[lang: string]: BasicsSnippetDefintion[]} = {};
@@ -127,9 +131,9 @@ class SnippetCache {
     this.fileCache.clear();
   }
 
-  readJsonSnippetsFile(absolutePath: string): VSCodeJsonSnippetsDefinition | null {
+  readJsonSnippetsFile(absolutePath: string): Result<VSCodeJsonSnippetsDefinition, string> {
     if (this.fileCache.has(absolutePath)) {
-      return this.fileCache.get(absolutePath)!;
+      return {ok: true, value: this.fileCache.get(absolutePath)!};
     }
 
     const parseErrors: JSONC.ParseError[] = [];
@@ -142,10 +146,10 @@ class SnippetCache {
 
       this.fileCache.set(absolutePath, json);
 
-      return json;
-    } catch {
-      // TODO lift validation and errors to onConfigurationChange
-      return null
+      return {ok: true, value: json};
+    } catch (error: any) {
+      const msg = error?.message ?? String(error);
+      return {ok: false, error: `Failed to parse ${absolutePath}. Error: ${msg}`};
     }
   }
 
@@ -153,49 +157,59 @@ class SnippetCache {
    * For package.json vscode like snippets
    * only json is supported (no jsonc)
    */
-  loadSnippetsFromPackageJson(absolutePath: string) {
-    let pkgJson: unknown;
+  loadSnippetsFromPackageJson(absolutePath: string): Result<void, string> {
     try {
-      pkgJson = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
-      S.assert(pkgJson, PackageJsonSchema)
+      const pkgJson = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
 
-      const snippets = pkgJson?.contributes?.snippets as Array<
-        {language: string | string[], path: string}
-      > | undefined;
-
+      const snippets = pkgJson?.contributes?.snippets as unknown;
       if (!snippets) {
-        return;
+        return {ok: true, value: undefined};
       }
+
+      S.assert(snippets, PackageJsonSnippetsSchema);
 
       const dir = path.dirname(absolutePath);
 
+      const errorMessages: string[] = [];
       for (const {language, path: relativeSnippetFilePath} of snippets) {
         const snippetsFilePath = path.join(dir, relativeSnippetFilePath);
         if (typeof language === 'string') {
-          this.loadSnippetsFromLanguageJson(snippetsFilePath, language);
+          const out = this.loadSnippetsFromLanguageJson(snippetsFilePath, language);
+          if (!out.ok) {
+            errorMessages.push(out.error);
+          }
         } else {
           for (const lang of language) {
-            this.loadSnippetsFromLanguageJson(snippetsFilePath, lang);
+            const out = this.loadSnippetsFromLanguageJson(snippetsFilePath, lang);
+            if (!out.ok) {
+              errorMessages.push(out.error);
+            }
           }
         }
       }
-    }
-    // TODO lift validation and errors to onConfigurationChange
-    catch {}
-  }
-  loadSnippetsFromLanguageJson(absolutePath: string, lang?: string) {
-    const json = this.readJsonSnippetsFile(absolutePath);
+      if (errorMessages.length > 0) {
+        return {ok: false, error: errorMessages.join('\n')};
+      }
 
-    // TODO lift validation and errors to onConfigurationChange
-    if (json == null) {
-      return;
+      return {ok: true, value: undefined};
+    } catch (e: any) {
+      return {ok: false, error: `Failed to load snippets from ${absolutePath}. Error: ${e?.message ?? e}`};
+    }
+  }
+  loadSnippetsFromLanguageJson(absolutePath: string, lang?: string): Result<void, string> {
+    const jsonResult = this.readJsonSnippetsFile(absolutePath);
+
+    if (!jsonResult.ok) {
+      return jsonResult;
     }
 
     if (lang == null) {
       lang = path.basename(absolutePath, path.extname(absolutePath));
     }
 
-    this.addSnippets(lang, Object.entries(json));
+    this.addSnippets(lang, Object.entries(jsonResult.value));
+
+    return {ok: true, value: undefined};
   }
 
   addSnippets(lang: string, snippets: Array<[name: string, entity: VSCodeSnippetEntity]>) {
@@ -375,6 +389,7 @@ export function createConnection(): lsp.Connection {
           const sources = typeof SETTINGS.snippet.sources === 'string' ? [SETTINGS.snippet.sources] : SETTINGS.snippet.sources;
 
           const stack = [...sources];
+          const errorMessages: string[] = [];
 
           while (stack.length > 0) {
             const sourcePath = stack.shift()!;
@@ -392,13 +407,19 @@ export function createConnection(): lsp.Connection {
 
               // has package.json -> handle as package.json
               if (path.basename(normalizedPath) === 'package.json') {
-                snippetCache.loadSnippetsFromPackageJson(sourcePath);
+                const out = snippetCache.loadSnippetsFromPackageJson(sourcePath);
+                if (!out.ok) {
+                  errorMessages.push(out.error);
+                }
                 continue;
               }
 
               // handle as language json file
               if (normalizedPath.endsWith('.json')) {
-                snippetCache.loadSnippetsFromLanguageJson(sourcePath);
+                const out = snippetCache.loadSnippetsFromLanguageJson(sourcePath);
+                if (!out.ok) {
+                  errorMessages.push(out.error);
+                }
 
                 continue;
               }
@@ -407,7 +428,10 @@ export function createConnection(): lsp.Connection {
               if (fs.statSync(normalizedPath).isDirectory()) {
                 const maybePackageJson = path.join(normalizedPath, 'package.json');
                 if (fs.existsSync(maybePackageJson)) {
-                  snippetCache.loadSnippetsFromPackageJson(maybePackageJson);
+                  const out = snippetCache.loadSnippetsFromPackageJson(maybePackageJson);
+                  if (!out.ok) {
+                    errorMessages.push(out.error);
+                  }
                 } else {
                   // handle as <lang>.json files
                   const jsons = fg.sync('**/*.json', {
@@ -416,23 +440,31 @@ export function createConnection(): lsp.Connection {
                     dot: true,
                   });
                   for (const json of jsons) {
-                    snippetCache.loadSnippetsFromLanguageJson(json);
+                    const out = snippetCache.loadSnippetsFromLanguageJson(json);
+                    if (!out.ok) {
+                      errorMessages.push(out.error);
+                    }
                   }
                 }
               }
 
               // else ignore
             } catch (e: any) {
-              connection.console.error(`Failed to load snippets from ${sourcePath}. Error: ${e?.message ?? e}`);
+              errorMessages.push(`Failed to load snippets from ${sourcePath}. Error: ${e?.message ?? e}`);
             }
           }
 
           // No need to keep file cache in memory after snippets are loaded
           snippetCache.clearFileCache();
+
+          if (errorMessages.length > 0) {
+            connection.console.warn(`Failed to load snippets. Error${errorMessages.length > 1 ? 's' : ''}: ${errorMessages.join('\n')}`);
+          }
         }
       }
-      // TODO surface errors to client
-    } catch {}
+    } catch (e: any) {
+      connection.console.error(`Failed to validate settings. Error: ${e?.message ?? e}`);
+    }
   });
 
   return connection;
