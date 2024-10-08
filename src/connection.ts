@@ -46,7 +46,8 @@ const PackageJsonSchema = S.object({
 const VSCodeSnippetEntitySchema = S.object({
   prefix: S.union([S.string(), S.array(S.string())]),
   body: S.union([S.string(), S.array(S.string())]),
-  description: S.optional(S.string()), // fallbacks to name
+  // Arrays are not valid descriptions but there are cases where arrays are using in descriptoin
+  description: S.optional(S.union([S.string(), S.array(S.string())])), // fallbacks to name
 });
 type VSCodeSnippetEntity = S.Infer<typeof VSCodeSnippetEntitySchema>;
 const VSCodeJsonSnippetsDefinitionSchema = S.record(S.string(), VSCodeSnippetEntitySchema);
@@ -205,7 +206,7 @@ class SnippetCache {
         label: name,
         prefix: snippet.prefix,
         body: snippet.body,
-        description: snippet.description,
+        description: Array.isArray(snippet.description) ? snippet.description.join('') : snippet.description,
       });
     }
   }
