@@ -1,26 +1,3 @@
-/**
- * TODO
- * - [x] completion for identifiers in current document
- * - [x] completion for paths from current document
- * - [x] completion for paths from root
- * - [x] completion for paths from ~
- * - [x] workspace configuration
- * - [x] completion for snippets
- *   - [x] load from package.json
- *   - [x] expand as snippets
- *   - [x] validate package.json
- *   - [x] load from lang.json
- *   - [x] load from dir
- *   - [x] validate json
- *   - [x] support JSONC
- *   - [x] support globs for snippet sources
- *   - [x] disable/enable
- *   - [x] cache loaded snippets
- *   - [ ] optimise completion by snippets
- * - [x] validate server settings
- * - [x] surface errors to client
- * - [x] docs in README
- */
 import * as lsp from 'vscode-languageserver/node';
 import fg from 'fast-glob';
 import {textDocuments} from './textDocuments.js';
@@ -343,6 +320,9 @@ export function createConnection(): lsp.Connection {
     return [...bufCompletions, ...snippetCompletions];
   });
 
+  // TODO add start of file / first few directories of a path in `detail`
+  // connection.onCompletionResolve(item => {});
+
   // TODO debounce doc updates to save cache identifiersLike used for completion
   // textDocuments.onDidChangeContent(change => {});
 
@@ -492,12 +472,8 @@ function getPathsCompletionItems(
 
   const dirContents = fs.readdirSync(absolutePath);
 
-  // TODO async
-  // TODO cache?
   return dirContents.map((dir) => {
     // TODO abort if token is cancelled
-    // TODO async
-    // TODO cache stats
     let stat
     try {
       stat = fs.statSync(path.join(absolutePath, dir));
@@ -507,7 +483,6 @@ function getPathsCompletionItems(
     return {
       label: dir,
       kind: stat.isDirectory() ? lsp.CompletionItemKind.Folder : lsp.CompletionItemKind.File,
-      // TODO we can show first few lines of a file in `detail`
     } satisfies lsp.CompletionItem;
   }).filter(x => x !== null);
 }
