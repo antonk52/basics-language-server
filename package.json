@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "fast-glob": "^3.3.2",
+    "isbinaryfile": "^5.0.2",
     "jsonc-parser": "^3.3.1",
     "superstruct": "^2.0.2",
     "vscode-languageserver": "^9.0.1",

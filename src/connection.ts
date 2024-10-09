@@ -6,6 +6,7 @@ import * as S from 'superstruct';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import {isBinaryFile} from 'isbinaryfile';
 
 import * as uri from 'vscode-uri';
 
@@ -320,8 +321,45 @@ export function createConnection(): lsp.Connection {
     return [...bufCompletions, ...snippetCompletions];
   });
 
-  // TODO add start of file / first few directories of a path in `detail`
-  // connection.onCompletionResolve(item => {});
+  connection.onCompletionResolve(async (item, token) => {
+    if (!item.data?.absPath) {
+      return item;
+    }
+    if (item.kind !== lsp.CompletionItemKind.File) {
+      return item;
+    }
+    const stat = await fs.promises.stat(item.data.absPath);
+
+    // display a stub if file is larger than 10MB
+    if (stat.size > 10 * 1024 * 1024) {
+      item.documentation = 'File is too large to preview';
+      return item;
+    }
+
+    const data = await fs.promises.readFile(item.data.absPath);
+    const isBin = await isBinaryFile(data, stat.size);
+
+    if (isBin) {
+      item.documentation = 'Binary file';
+      return item;
+    }
+
+    if (token.isCancellationRequested) {
+      return item;
+    }
+
+    const contents = data.toString();
+    const ext = path.extname(item.label)
+      // remove leading dot
+      .slice(1);
+    const markedString: lsp.MarkupContent = {
+      kind: lsp.MarkupKind.Markdown,
+      value: `\`\`\`${ext}\n${contents}\`\`\``,
+    };
+    item.documentation = markedString;
+
+    return item;
+  });
 
   // TODO debounce doc updates to save cache identifiersLike used for completion
   // textDocuments.onDidChangeContent(change => {});
@@ -480,9 +518,11 @@ function getPathsCompletionItems(
     } catch (e: any) {
       return null;
     }
+    const isDir = stat.isDirectory();
     return {
       label: dir,
-      kind: stat.isDirectory() ? lsp.CompletionItemKind.Folder : lsp.CompletionItemKind.File,
+      kind: isDir ? lsp.CompletionItemKind.Folder : lsp.CompletionItemKind.File,
+      data: {absPath: path.join(absolutePath, dir)},
     } satisfies lsp.CompletionItem;
   }).filter(x => x !== null);
 }
