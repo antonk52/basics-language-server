@@ -14,34 +14,11 @@ npm install -g basics-language-server
 
 ## Usage with neovim
 
-Until this is added to the LSP config, you can add it manually by adding this one file to your config:
-```lua
--- lua/lspconfig/configs/basics_ls.lua
-return {
-    default_config = {
-        cmd = { 'basics-language-server' },
-        single_file_support = true
-    },
-    docs = {
-        description = 'Buffer, path, and snippet completions',
-        default_config = {
-            buffer = {
-                enable = true,
-                minCompletionLength = 4
-            },
-            path = {
-                enable = true,
-            },
-            snippet = {
-                enable = false,
-                sources = []
-            }
-        }
-    }
-}
-```
+The server is available in [`nvim-lspconfig`](https://github.com/neovim/nvim-lspconfig). Start the server with 
 
-Now you can start the server with `require('lspconfig').basics_ls.setup({})`
+```lua
+require('lspconfig').basics_ls.setup({})
+```
 
 ## Settings
 
@@ -57,7 +34,7 @@ require('lspconfig').basics_ls.setup({
         },
         snippet = {
             enable = false,
-            sources = [] -- paths to package containing snippets, see examples below
+            sources = {} -- paths to package containing snippets, see examples below
         },
     }
 })
