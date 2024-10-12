@@ -22,6 +22,9 @@
   },
   "bugs": "https://github.com/antonk52/basics-language-server/issues",
   "funding": "https://github.com/sponsors/antonk52",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
     "@types/node": "^22.7.4",
     "typescript": "^5.0.0"
