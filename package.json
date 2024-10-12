@@ -1,7 +1,12 @@
 {
   "name": "basics-language-server",
   "version": "1.0.0",
+  "description": "Buffer, path, and snippet completions",
   "license": "MIT",
+  "keywords": [
+    "completion",
+    "language server"
+  ],
   "module": "./dist/connection.js",
   "bin": {
     "basics-language-server": "./dist/cli.js"
@@ -11,6 +16,12 @@
     "watch": "tsc -w",
     "server": "node dist/cli.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antonk52/basics-language-server"
+  },
+  "bugs": "https://github.com/antonk52/basics-language-server/issues",
+  "funding": "https://github.com/sponsors/antonk52",
   "devDependencies": {
     "@types/node": "^22.7.4",
     "typescript": "^5.0.0"
