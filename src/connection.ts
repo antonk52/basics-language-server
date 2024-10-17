@@ -74,7 +74,7 @@ const SETTINGS: S.Infer<typeof SettingsSchema> = {
      * On how to define snippets see:
      * @see https://code.visualstudio.com/docs/editor/userdefinedsnippets#_create-your-own-snippets
      */
-    sources: '~/.config/friendly-snippets' as string | string[],
+    sources: [] as string | string[],
   }
 };
 
