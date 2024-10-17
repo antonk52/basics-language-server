@@ -5,7 +5,8 @@
   "license": "MIT",
   "keywords": [
     "completion",
-    "language server"
+    "language server",
+    "lsp"
   ],
   "module": "./dist/connection.js",
   "bin": {
