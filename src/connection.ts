@@ -194,9 +194,17 @@ export class SnippetCache {
     const target = lang === 'global' ? this.globalSnippets : (this.snippetsByLanguage[lang] ??= []);
 
     for (const [name, snippet] of snippets) {
+      // combine name and prefixes, remove duplicates
+      const triggers: string[] = Array.from(new Set(
+        [
+          name,
+          ...Array.isArray(snippet.prefix) ? snippet.prefix : (snippet.prefix ? [snippet.prefix] : []),
+        ]
+      ));
+
       target.push({
         label: name,
-        prefix: snippet.prefix,
+        prefix: triggers,
         body: snippet.body,
         description: Array.isArray(snippet.description) ? snippet.description.join('') : snippet.description,
       });

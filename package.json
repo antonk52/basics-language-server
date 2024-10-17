@@ -14,7 +14,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "server": "node dist/cli.js"
+    "server": "node dist/cli.js",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "repository": {
     "type": "git",
