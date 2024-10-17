@@ -1,6 +1,6 @@
 {
   "name": "basics-language-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Buffer, path, and snippet completions",
   "author": "antonk52",
   "license": "MIT",
@@ -38,7 +38,10 @@
           "description": "Enable snippet completion"
         },
         "basics_ls.snippet.sources": {
-          "type": ["string", "array"],
+          "type": [
+            "string",
+            "array"
+          ],
           "default": [],
           "description": "Path(s) to directories or json files containing snippets. Supports globs and specific file paths."
         }
