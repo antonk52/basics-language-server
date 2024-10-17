@@ -2,6 +2,7 @@
   "name": "basics-language-server",
   "version": "1.0.1",
   "description": "Buffer, path, and snippet completions",
+  "author": "antonk52",
   "license": "MIT",
   "keywords": [
     "completion",
@@ -11,6 +12,38 @@
   "module": "./dist/connection.js",
   "bin": {
     "basics-language-server": "./dist/cli.js"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "Basics Language Server Settings",
+      "properties": {
+        "basics_ls.buffer.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable word-like completion"
+        },
+        "basics_ls.buffer.minCompletionLength": {
+          "type": "number",
+          "default": 4,
+          "description": "The minimum completion item length"
+        },
+        "basics_ls.path.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable path completion"
+        },
+        "basics_ls.snippet.enable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable snippet completion"
+        },
+        "basics_ls.snippet.sources": {
+          "type": ["string", "array"],
+          "default": [],
+          "description": "Path(s) to directories or json files containing snippets. Supports globs and specific file paths."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "tsc",
