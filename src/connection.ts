@@ -100,7 +100,7 @@ type Result<Ok, Err> = {
   error: Err
 }
 
-class SnippetCache {
+export class SnippetCache {
   globalSnippets: BasicsSnippetDefintion[] = [];
   snippetsByLanguage: {[lang: string]: BasicsSnippetDefintion[]} = {};
 
@@ -206,7 +206,6 @@ class SnippetCache {
   getCompletionItems(
     languageId: string,
     linePreCursor: string,
-    _connection: lsp.Connection,
   ): lsp.CompletionItem[] {
     const completionItems: lsp.CompletionItem[] = [];
 
@@ -295,7 +294,7 @@ export function createConnection(): lsp.Connection {
 
     const snippetCompletions: lsp.CompletionItem[] =
       SETTINGS.snippet.enable
-        ? snippetCache.getCompletionItems(languageId, typedWord, connection)
+        ? snippetCache.getCompletionItems(languageId, typedWord)
         : [];
 
     if (!SETTINGS.buffer.enable) {
