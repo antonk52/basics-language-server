@@ -27,8 +27,11 @@ type VSCodeSnippetEntity = S.Infer<typeof VSCodeSnippetEntitySchema>;
 const VSCodeJsonSnippetsDefinitionSchema = S.record(S.string(), VSCodeSnippetEntitySchema);
 type VSCodeJsonSnippetsDefinition = S.Infer<typeof VSCodeJsonSnippetsDefinitionSchema>;
 
+const MatchStrategySchema = S.enums(['exact', 'fuzzy']);
+type MatchStrategy = S.Infer<typeof MatchStrategySchema>;
 const BufferSettingsSchema = S.object({
   enable: S.boolean(),
+  matchStrategy: MatchStrategySchema,
   minCompletionLength: S.number(),
 });
 const PathSettingsSchema = S.object({
@@ -37,6 +40,7 @@ const PathSettingsSchema = S.object({
 const SnippetSettingsSchema = S.object({
   enable: S.boolean(),
   sources: S.union([S.string(), S.array(S.string())]),
+  matchStrategy: MatchStrategySchema,
 });
 const SettingsSchema = S.object({
   buffer: BufferSettingsSchema,
@@ -56,6 +60,7 @@ const SETTINGS: S.Infer<typeof SettingsSchema> = {
     enable: true,
     /** only complete identifiers longer than this */
     minCompletionLength: 4,
+    matchStrategy: 'exact',
   },
   path: {
     enable: true
@@ -75,6 +80,7 @@ const SETTINGS: S.Infer<typeof SettingsSchema> = {
      * @see https://code.visualstudio.com/docs/editor/userdefinedsnippets#_create-your-own-snippets
      */
     sources: [] as string | string[],
+    matchStrategy: 'exact',
   }
 };
 
@@ -100,6 +106,16 @@ type Result<Ok, Err> = {
   error: Err
 }
 
+const createMatcher: Record<MatchStrategy, (typedText: string) => (prefix: string) => boolean> = {
+  exact: (typedText) => (prefix) => prefix.startsWith(typedText),
+  fuzzy: (typedText) => {
+    // has to start with the first character
+    // but there can be more characters between the typed ones
+    const re = new RegExp(`^${typedText.split('').join('.*')}`)
+
+    return (prefix) => re.test(prefix);
+  },
+};
 export class SnippetCache {
   globalSnippets: BasicsSnippetDefintion[] = [];
   snippetsByLanguage: {[lang: string]: BasicsSnippetDefintion[]} = {};
@@ -214,6 +230,7 @@ export class SnippetCache {
   getCompletionItems(
     languageId: string,
     linePreCursor: string,
+    matchStrategy: MatchStrategy,
   ): lsp.CompletionItem[] {
     const completionItems: lsp.CompletionItem[] = [];
 
@@ -224,15 +241,17 @@ export class SnippetCache {
 
     const typedWord = match[0];
 
+    const matcher = createMatcher[matchStrategy](typedWord)
+
     for (const snippet of this.globalSnippets) {
-      if (isSnippetMatch(snippet, typedWord)) {
+      if (isSnippetMatch(snippet, matcher)) {
         completionItems.push(cachedSnippetToCompletionItem(snippet));
       }
     }
 
     if (languageId in this.snippetsByLanguage) {
       for (const snippet of this.snippetsByLanguage[languageId]) {
-        if (isSnippetMatch(snippet, typedWord)) {
+        if (isSnippetMatch(snippet, matcher)) {
           completionItems.push(cachedSnippetToCompletionItem(snippet));
         }
       }
@@ -241,11 +260,11 @@ export class SnippetCache {
     return completionItems;
   }
 }
-function isSnippetMatch(snippet: BasicsSnippetDefintion, typedText: string): boolean {
+function isSnippetMatch(snippet: BasicsSnippetDefintion, matcher: (prefix: string) => boolean): boolean {
   if (Array.isArray(snippet.prefix)) {
-    return snippet.prefix.some(prefix => prefix.startsWith(typedText));
+    return snippet.prefix.some(prefix => matcher(prefix));
   }
-  return snippet.prefix.startsWith(typedText);
+  return matcher(snippet.prefix);
 }
 function cachedSnippetToCompletionItem(snippet: BasicsSnippetDefintion): lsp.CompletionItem {
   return {
@@ -302,7 +321,7 @@ export function createConnection(): lsp.Connection {
 
     const snippetCompletions: lsp.CompletionItem[] =
       SETTINGS.snippet.enable
-        ? snippetCache.getCompletionItems(languageId, typedWord)
+        ? snippetCache.getCompletionItems(languageId, typedWord, SETTINGS.snippet.matchStrategy)
         : [];
 
     if (!SETTINGS.buffer.enable) {
