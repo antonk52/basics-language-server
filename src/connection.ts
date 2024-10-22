@@ -333,8 +333,10 @@ export function createConnection(): lsp.Connection {
 
     if (!allIdentifiers) return snippetCompletions;
 
+    const matcher = createMatcher[SETTINGS.buffer.matchStrategy](typedWord);
+
     const bufCompletions = [...new Set(allIdentifiers)]
-      .filter(x => x.length > SETTINGS.buffer.minCompletionLength)
+      .filter(x => ((x.length > SETTINGS.buffer.minCompletionLength) && matcher(x)))
       .map((identifierLike) => {
         return {
           label: identifierLike,
