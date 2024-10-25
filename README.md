@@ -28,7 +28,7 @@ require('lspconfig').basics_ls.setup({
         buffer = {
             enable = true,
             minCompletionLength = 4 -- only provide completions for words longer than 4 characters
-            matchStrategy: 'exact', -- or 'fuzzy'
+            matchStrategy = 'exact', -- or 'fuzzy'
         },
         path = {
             enable = true,
@@ -36,7 +36,7 @@ require('lspconfig').basics_ls.setup({
         snippet = {
             enable = false,
             sources = {} -- paths to package containing snippets, see examples below
-            matchStrategy: 'exact', -- or 'fuzzy'
+            matchStrategy = 'exact', -- or 'fuzzy'
         },
     }
 })
