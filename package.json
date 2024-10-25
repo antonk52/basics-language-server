@@ -1,6 +1,6 @@
 {
   "name": "basics-language-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Buffer, path, and snippet completions",
   "author": "antonk52",
   "license": "MIT",
